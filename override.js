@@ -41,4 +41,5 @@ window.addStop=function(){
   location.reload();
 };
 apply();
+if(typeof render==='function')render();
 })();
