@@ -1,0 +1,58 @@
+name: Fix gezi route links
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: Rota kodunu düzelt
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          old = "function mapUrl(place){return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(START)+'&destination='+encodeURIComponent(place)+'&travelmode=driving'}"
+          new = """function routeOrigin(d,id,custom){
+          const base=DATA[d].stops;
+          const customs=(state.custom&&state.custom[d])||[];
+          if(!custom){const n=Number(id);return n<=0?START:base[n-1][4]}
+          const ci=customs.findIndex(x=>x.id===id);
+          if(ci<=0)return base.at(-1)[4];
+          return customs[ci-1].place;
+          }
+          function mapPlace(place){
+          const p=String(place||'');
+          if(p.includes('Yerköprü Şelalesi'))return '37.028579,32.701243';
+          return p;
+          }
+          function mapUrl(origin,place,mode){return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(origin)+'&destination='+encodeURIComponent(mapPlace(place))+'&travelmode='+(mode==='walk'?'walking':'driving')}"""
+          if old in s:
+              s=s.replace(old,new)
+          old2="href=\"'+mapUrl(x[4])+'\""
+          new2="href=\"'+mapUrl(routeOrigin(day,o.i,o.custom),x[4],x[3])+'\""
+          if old2 in s:
+              s=s.replace(old2,new2)
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Değişiklik varsa kaydet
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "Değişiklik yok."
+          else
+            git commit -m "Rotaları duraktan durağa düzelt"
+            git push
+          fi
