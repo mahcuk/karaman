@@ -1,4 +1,4 @@
-const CACHE='karaman-gezi-v17';
+const CACHE='karaman-gezi-v18';
 const ASSETS=['./','./index.html','./manifest.json','./icon.svg','./update.js','./override.js','./route-fix.js','./route-final.js','./final-fix.js','./time-control.js'];
 
 self.addEventListener('install',event=>{
@@ -43,7 +43,7 @@ self.addEventListener('fetch',event=>{
           const html=await response.text();
           const finalHtml=html.includes('./update.js')
             ? html
-            : html.replace('</body>','<script src="./update.js?v=17"></script></body>');
+            : html.replace('</body>','<script src="./update.js?v=18"></script></body>');
 
           const result=new Response(finalHtml,{
             status:response.status,
