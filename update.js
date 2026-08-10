@@ -1,6 +1,6 @@
 (()=>{
 const DAY_KEY='karaman-current-day';
-const VERSION='17';
+const VERSION='18';
 let reloading=false;
 
 function installDayPersistence(){
@@ -13,7 +13,6 @@ function installDayPersistence(){
     wrapped.__persisted=true;
     window.setDay=wrapped;
   }
-
   const saved=localStorage.getItem(DAY_KEY);
   if(saved&&window.DAYS&&window.DAYS[saved]&&typeof window.setDay==='function'&&window.day!==saved){
     window.setDay(saved);
@@ -52,33 +51,49 @@ function addUpdateUI(reg){
       btn.disabled=true;
       btn.textContent='GÜNCELLENİYOR…';
       const text=box.querySelector('#appUpdateText');
-      if(text)text.textContent='Yeni sürüm etkinleştiriliyor…';
+      if(text)text.textContent='Yeni sürüm yükleniyor…';
 
       try{
-        await reg.update();
         const waiting=reg.waiting;
         if(waiting){
           waiting.postMessage({type:'SKIP_WAITING'});
           return;
         }
 
+        // Yeni worker henüz waiting durumuna geçmediyse update isteğini başlat.
+        await reg.update();
+
+        // updatefound/statechange ile yeni worker hazır olduğunda etkinleştir.
+        const activateIfReady=()=>{
+          const w=reg.waiting;
+          if(w){
+            w.postMessage({type:'SKIP_WAITING'});
+            return true;
+          }
+          return false;
+        };
+
+        if(activateIfReady()) return;
+
         const installing=reg.installing;
         if(installing){
           installing.addEventListener('statechange',()=>{
-            if(installing.state==='installed'&&navigator.serviceWorker.controller){
-              installing.postMessage({type:'SKIP_WAITING'});
-            }
+            if(installing.state==='installed') activateIfReady();
           });
           return;
         }
 
-        if(text)text.textContent='Güncelleme bulunamadı. Tekrar deneyin.';
-        btn.disabled=false;
-        btn.textContent='TEKRAR DENE';
+        // Sunucuda bekleyen bir worker yoksa bile sayfayı network'ten yeniden al.
+        // Kullanıcıya "Tekrar dene" döngüsü göstermiyoruz.
+        if(text)text.textContent='Sayfa yenileniyor…';
+        setTimeout(()=>{
+          const url=new URL(location.href);
+          url.searchParams.set('app_refresh',Date.now());
+          location.replace(url.toString());
+        },300);
       }catch(e){
-        if(text)text.textContent='Güncelleme başarısız. İnternet bağlantısını kontrol edip tekrar deneyin.';
-        btn.disabled=false;
-        btn.textContent='TEKRAR DENE';
+        if(text)text.textContent='Bağlantı kurulamadı. Sayfa yeniden deneniyor…';
+        setTimeout(()=>location.reload(),700);
       }
     });
   }
