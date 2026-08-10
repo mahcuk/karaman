@@ -1,38 +1,36 @@
 (()=>{
-  // v19 — Güncelleme döngüsünü tamamen kaldır.
-  // Uygulama artık Service Worker tarafından otomatik güncellenmeye çalışılmaz.
-  // Mevcut eski Service Worker bir kez temizlenir; gezi verileri/localStorage korunur.
-  const CLEAN_KEY='karaman-sw-cleaned-v19';
+  // v20 — Service Worker güncelleme/yenileme döngüsünü kes.
+  // Bu dosya uygulamayı ASLA otomatik yenilemez.
+  // Gezi verileri ve localStorage korunur.
+  const KEY='karaman-sw-cleaned-v20';
 
-  async function cleanupOldServiceWorker(){
+  async function disableOldServiceWorkers(){
     if(!('serviceWorker' in navigator)) return;
-    if(sessionStorage.getItem(CLEAN_KEY)==='1') return;
+    if(localStorage.getItem(KEY)==='1') return;
 
     try{
       const regs=await navigator.serviceWorker.getRegistrations();
-      if(!regs.length) return;
-
-      sessionStorage.setItem(CLEAN_KEY,'1');
-
-      await Promise.all(regs.map(r=>r.unregister().catch(()=>false)));
+      for(const reg of regs){
+        try{ await reg.unregister(); }catch(e){}
+      }
 
       if('caches' in window){
         const names=await caches.keys();
-        await Promise.all(names.map(n=>caches.delete(n).catch(()=>false)));
+        for(const name of names){
+          try{ await caches.delete(name); }catch(e){}
+        }
       }
 
-      // Unregister tamamlandıktan sonra yalnızca bir kez yeniden aç.
-      // Uygulama verilerine dokunulmaz.
-      setTimeout(()=>location.reload(),200);
+      localStorage.setItem(KEY,'1');
+      console.info('Eski Service Worker devre dışı bırakıldı. Otomatik yenileme yapılmayacak.');
     }catch(e){
-      // Temizlik başarısızsa otomatik yenileme yapma; sonsuz döngü oluşmasın.
-      console.warn('Service Worker temizliği başarısız:',e);
+      console.warn('Service Worker temizlenemedi:',e);
     }
   }
 
   if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',cleanupOldServiceWorker,{once:true});
+    document.addEventListener('DOMContentLoaded',disableOldServiceWorkers,{once:true});
   }else{
-    cleanupOldServiceWorker();
+    disableOldServiceWorkers();
   }
 })();
