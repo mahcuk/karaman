@@ -1,5 +1,9 @@
-const CACHE='karaman-gezi-v18';
-const ASSETS=['./','./index.html','./manifest.json','./icon.svg','./update.js','./override.js','./route-fix.js','./route-final.js','./final-fix.js','./time-control.js'];
+const CACHE='karaman-gezi-v20';
+
+// Emergency recovery Service Worker.
+// The previous versions injected update.js into the application and caused
+// an update/reload loop. This version deliberately does not inject scripts.
+const ASSETS=['./','./index.html','./manifest.json','./icon.svg'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(
@@ -10,63 +14,26 @@ self.addEventListener('install',event=>{
 });
 
 self.addEventListener('activate',event=>{
-  event.waitUntil(
-    caches.keys()
-      .then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))
-      .then(()=>self.clients.claim())
-  );
-});
-
-self.addEventListener('message',event=>{
-  if(event.data?.type==='SKIP_WAITING') self.skipWaiting();
+  event.waitUntil((async()=>{
+    const keys=await caches.keys();
+    await Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)));
+    await self.clients.claim();
+    // This recovery worker unregisters itself after cleaning the old worker.
+    // The application then runs directly from the network without a PWA
+    // update loop. LocalStorage is never touched here.
+    await self.registration.unregister();
+  })());
 });
 
 self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET') return;
-
   const url=new URL(event.request.url);
-  const isAppShell=url.pathname.endsWith('/sw.js') ||
-                    url.pathname.endsWith('/update.js') ||
-                    url.pathname.endsWith('/index.html') ||
-                    url.pathname.endsWith('/');
 
-  if(isAppShell){
+  // Never rewrite/inject application HTML or JavaScript.
+  if(url.origin===location.origin){
     event.respondWith(
       fetch(event.request,{cache:'no-store'})
-        .then(async response=>{
-          if(!response.ok) throw new Error('network');
-
-          if(url.pathname.endsWith('/sw.js') || url.pathname.endsWith('/update.js')){
-            return response;
-          }
-
-          const html=await response.text();
-          const finalHtml=html.includes('./update.js')
-            ? html
-            : html.replace('</body>','<script src="./update.js?v=18"></script></body>');
-
-          const result=new Response(finalHtml,{
-            status:response.status,
-            statusText:response.statusText,
-            headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}
-          });
-
-          caches.open(CACHE).then(c=>c.put(event.request,result.clone()));
-          return result;
-        })
         .catch(()=>caches.match(event.request).then(r=>r||caches.match('./index.html')))
     );
-    return;
   }
-
-  event.respondWith(
-    caches.match(event.request)
-      .then(cached=>cached || fetch(event.request).then(response=>{
-        if(response.ok){
-          const copy=response.clone();
-          caches.open(CACHE).then(c=>c.put(event.request,copy));
-        }
-        return response;
-      }).catch(()=>caches.match('./index.html')))
-  );
 });
