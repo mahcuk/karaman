@@ -1,6 +1,6 @@
 (()=>{
 const DAY_KEY='karaman-current-day';
-const VERSION='15';
+const VERSION='16';
 let reloading=false;
 function installDayPersistence(){
   const original=window.setDay;
@@ -10,9 +10,20 @@ function installDayPersistence(){
     window.setDay=wrapped;
   }
   const saved=localStorage.getItem(DAY_KEY);
-  if(saved&&window.DAYS&&window.DAYS[saved]&&typeof window.setDay==='function'&&window.day!==saved){
-    window.setDay(saved);
-  }
+  if(saved&&window.DAYS&&window.DAYS[saved]&&typeof window.setDay==='function'&&window.day!==saved)window.setDay(saved);
+}
+async function hardUpdate(){
+  const btn=document.getElementById('appUpdateBtn');
+  if(btn){btn.disabled=true;btn.textContent='GÜNCELLENİYOR…';}
+  try{
+    const regs=await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map(r=>r.unregister()));
+    const names=await caches.keys();
+    await Promise.all(names.map(n=>caches.delete(n)));
+  }catch(e){}
+  const url=new URL(location.href);
+  url.searchParams.set('app_update',Date.now());
+  location.replace(url.toString());
 }
 function addUpdateUI(reg){
   let box=document.getElementById('appUpdateBox');
@@ -33,25 +44,20 @@ function addUpdateUI(reg){
   const btn=box.querySelector('#appUpdateBtn');
   if(btn&&!btn.dataset.bound){
     btn.dataset.bound='1';
-    btn.addEventListener('click',()=>{
-      btn.disabled=true;btn.textContent='GÜNCELLENİYOR…';
-      if(reg.waiting){reg.waiting.postMessage({type:'SKIP_WAITING'});}
-      else reg.update().catch(()=>{});
-    });
+    btn.addEventListener('click',hardUpdate);
   }
 }
 function register(){
- if(!('serviceWorker'in navigator))return;
- navigator.serviceWorker.register('./sw.js?v='+VERSION).then(reg=>{
-   addUpdateUI(reg);
-   reg.update().catch(()=>{});
-   reg.addEventListener('updatefound',()=>addUpdateUI(reg));
-   navigator.serviceWorker.addEventListener('controllerchange',()=>{
-     if(reloading)return;
-     reloading=true;
-     setTimeout(()=>location.reload(),150);
-   });
- }).catch(()=>{});
+  if(!('serviceWorker'in navigator))return;
+  navigator.serviceWorker.register('./sw.js?v='+VERSION).then(reg=>{
+    addUpdateUI(reg);
+    reg.update().catch(()=>{});
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(reloading)return;
+      reloading=true;
+      setTimeout(()=>location.reload(),150);
+    });
+  }).catch(()=>{});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{installDayPersistence();register()});else{installDayPersistence();register()}
 })();
